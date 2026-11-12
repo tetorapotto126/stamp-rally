@@ -202,10 +202,6 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;z-index:70;pointer-event
     <ul class="list" id="pList"></ul>
     <div class="hint">ひとりずつ自分のカードになります。誰も入れなければ「みんなで1枚」。</div>
   </div>
-  <div class="card">
-    <label class="chk"><input type="checkbox" id="shareChk" checked>みんなの進み具合を共有する</label>
-    <div class="hint">だれかがクリアすると、ほかの親のスマホにもお知らせが出ます。共有されるのは「名前・クリアした数・お題の番号」だけで、写真は送られません。</div>
-  </div>
   <div class="row">
     <button class="btn ghost" id="setupBack">もどる</button>
     <button class="btn red big" id="decide" style="flex:1">決定してカードを配る</button>
@@ -2691,7 +2687,7 @@ $('codeGo').onclick=()=>{const p=dec($('codeIn').value);if(!p){toast('リンク�
 /* ---------- setup ---------- */
 const D=()=>S.draft;
 function renderSetup(){
-  $('rallyName').value=D().name;$('shareChk').checked=D().share!==false;
+  $('rallyName').value=D().name;
   $('presets').innerHTML=PRESETS.filter(p=>!D().missions.includes(p)).map(p=>`<button class="chip" data-p="${esc(p)}">＋${esc(p)}</button>`).join('');
   $('mList').innerHTML=D().missions.length?D().missions.map((m,i)=>`<li><span class="num">${i+1}</span><span class="t">${esc(m)}</span><button class="x" data-m="${i}">×</button></li>`).join(''):'<li class="empty">上の候補をタップか、自由に入力</li>';
   $('pList').innerHTML=D().players.map((p,i)=>`<li><span class="num" style="background:#cfe6ff">${i+1}</span><span class="t">${esc(p)}</span><button class="x" data-p="${i}">×</button></li>`).join('');
@@ -2705,18 +2701,17 @@ $('pAdd').onclick=()=>{const t=$('pInput').value.trim();if(!t)return;if(D().play
 $('pInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('pAdd').click()}};
 $('pList').onclick=e=>{const b=e.target.closest('.x');if(!b)return;D().players.splice(+b.dataset.p,1);save();renderSetup()};
 $('rallyName').oninput=e=>{D().name=e.target.value;save()};
-$('shareChk').onchange=e=>{D().share=e.target.checked;save()};
 $('setupBack').onclick=renderHome;
 $('decide').onclick=()=>{
   if(!D().missions.length){toast('お題を1つ以上入れてね');return}
   unlockAudio();
   const r=rid()+rid(),name=D().name.trim()||'スタンプラリー',ps=D().players.length?D().players.slice():['みんな'];
-  S.lastDeal={r,name,missions:D().missions.slice(),players:ps,share:D().share!==false&&ps.length>1};
+  S.lastDeal={r,name,missions:D().missions.slice(),players:ps,share:false};
   S.draft={name:'',missions:[],players:[],share:true};save();renderDeal();
 };
 
 /* ---------- deal ---------- */
-function payload(i){const L=S.lastDeal;const p={r:L.r,n:L.name,m:packM(L.missions),c:L.players[i],i};if(L.share){p.s=1;p.p=L.players}return p}
+function payload(i){const L=S.lastDeal;const p={r:L.r,n:L.name,m:packM(L.missions),c:L.players[i],i};return p}
 function linkFor(i){return BASE+'#'+encLink(payload(i))}
 function renderDeal(){
   const L=S.lastDeal;
@@ -2724,8 +2719,7 @@ function renderDeal(){
   $('dealList').innerHTML=L.players.map((p,i)=>`<li><span class="num" style="background:#cfe6ff">${i+1}</span><span class="t"><b>${esc(p)}</b></span>
     <div class="acts"><button class="btn blue sm" data-copy="${i}">🔗 リンク</button><button class="btn ghost sm" data-qr="${i}">▦ QR</button><button class="btn sm" data-here="${i}">このスマホで</button></div></li>`).join('');
   $('manualBox').style.display='none';show('deal');
-  $('dealBoardBox').style.display=L.share?'block':'none';
-  if(L.share)liveStart({r:L.r,missions:L.missions,players:L.players,selfI:-1,n:L.missions.length});else liveStop();
+  $('dealBoardBox').style.display='none';
 }
 $('dealList').onclick=async e=>{const c=e.target.closest('[data-copy]'),h=e.target.closest('[data-here]'),q=e.target.closest('[data-qr]');
   if(q){showQR(+q.dataset.qr);return}
@@ -2740,11 +2734,10 @@ function importCard(p){
   const ms=p&&unpackM(p.m);
   if(!p||!ms.length){toast('カードを読み込めませんでした');return}
   const k=p.r+'-'+p.i;
-  if(!S.cards[k]){S.cards[k]={name:String(p.n||'スタンプラリー'),child:String(p.c||'みんな'),missions:ms,stamps:{},r:p.r,i:p.i,share:!!p.s,players:Array.isArray(p.p)?p.p.map(String):null};S.order.unshift(k);save();toast(`${p.c}のカードを受け取りました！`)}
+  if(!S.cards[k]){S.cards[k]={name:String(p.n||'スタンプラリー'),child:String(p.c||'みんな'),missions:ms,stamps:{},r:p.r,i:p.i,share:false,players:null};S.order.unshift(k);save();toast(`${p.c}のカードを受け取りました！`)}
   openCard(k);
 }
 function openCard(k){cur=k;const c=S.cards[k];show('play');
-  if(c&&c.share&&c.r)liveStart({r:c.r,missions:c.missions,players:c.players,selfI:c.i,n:c.missions.length});else liveStop();
   renderPlay()}
 const C=()=>S.cards[cur];
 async function renderPlay(popIdx){
@@ -2756,7 +2749,7 @@ async function renderPlay(popIdx){
   $('progTxt').textContent=d===n?'🎉 コンプリート！':`あと ${n-d} こ`;
   $('medals').innerHTML=tiers(n).map(t=>`<span class="md ${d>=t.at?'on':''}">${t.e}<small>${t.at}こ</small></span>`).join('');
   $('albumBtn').style.display=d>0?'block':'none';
-  $('boardBox').style.display=c.share?'block':'none';renderBoard();
+  $('boardBox').style.display='none';
   $('grid').innerHTML=c.missions.map((m,i)=>{const st=c.stamps[i];
     return `<div class="m ${st?'done':''} ${st&&st.p?'hasph':''} ${popIdx===i?'pop':''}" data-i="${i}"><span class="no">No.${i+1}</span><div class="mt">${esc(m)}</div>
       <div class="slot">${st?(st.p?`<img class="ph" data-ph="${i}" alt="">`:'')+stampHTML(st):'ここにスタンプ'}</div></div>`}).join('');
@@ -2842,33 +2835,9 @@ function showQR(i){const L=S.lastDeal,url=linkFor(i),cv=$('qrCv'),g=cv.getContex
   $('qrOv').classList.add('show')}
 $('qrClose').onclick=()=>$('qrOv').classList.remove('show');
 
-/* ---------- live progress sharing (ntfy.sh relay: name, count, mission number only) ---------- */
-const NTFY='https://ntfy.sh/';
-let es=null,live=null,board={},seen=new Set();const bootT=Date.now()/1000-3;
-function topic(r){return 'stamprally-'+String(r).replace(/[^a-z0-9]/gi,'')}
-function liveStart(ctx){if(live&&live.r===ctx.r){live=ctx;renderBoard();return}liveStop();live=ctx;board={};seen=new Set();liveConnect()}
-function liveConnect(){if(!live||!window.EventSource)return;try{if(es)es.close();es=new EventSource(NTFY+topic(live.r)+'/sse?since=12h');es.onmessage=onLive}catch(e){es=null}}
-function liveStop(){if(es){try{es.close()}catch(e){}es=null}live=null;board={}}
-function onLive(e){if(!live)return;let w,ev;try{w=JSON.parse(e.data);if(w.event!=='message'||seen.has(w.id))return;seen.add(w.id);ev=JSON.parse(w.message)}catch(_){return}
-  if(!ev||typeof ev.i!=='number'||ev.i<0||ev.i>20)return;
-  const n=live.n,d=Math.max(0,Math.min(n,ev.d|0)),name=String(ev.c||'').slice(0,10),old=board[ev.i];
-  if(!old||w.time>=old.t)board[ev.i]={c:name,d,t:w.time};
-  renderBoard();
-  if(ev.k==='s'&&w.time>=bootT&&ev.i!==live.selfI){const m=live.missions[ev.mi|0]||'';
-    banner(d>=n?`👑 ${name} がコンプリート！`:`🎉 ${name} が「${m}」クリア！（${d}/${n}）`);sfxPing()}}
-function pubState(k,mi){const c=C();if(!c||!c.share||!c.r)return;
-  const ev={k,i:c.i,c:c.child,d:Object.keys(c.stamps).length,mi};
-  try{fetch(NTFY+topic(c.r),{method:'POST',body:JSON.stringify(ev)}).catch(()=>{})}catch(e){}}
-function renderBoard(){if(!live)return;const inPlay=$('play').classList.contains('on'),el=inPlay?$('board'):$('dealBoard');if(!el)return;
-  const n=live.n,rows={};
-  (live.players||[]).forEach((p,i)=>rows[i]={c:p,d:0});
-  Object.keys(board).forEach(i=>{rows[i]={c:(live.players&&live.players[i])||board[i].c,d:board[i].d}});
-  if(inPlay&&C()&&live.selfI>=0)rows[live.selfI]={c:C().child,d:Object.keys(C().stamps).length};
-  const ks=Object.keys(rows).map(Number).sort((a,b)=>a-b);
-  el.innerHTML=ks.length?ks.map(i=>{const r=rows[i];return `<div class="brow ${i===live.selfI?'me':''}"><span class="bn">${esc(r.c)}</span><span class="bb"><i style="width:${r.d/n*100}%"></i></span><span class="bc">${r.d}/${n}</span><span class="bm">${medalFor(r.d,n)}</span></div>`}).join(''):'<div class="empty">まだだれもクリアしていません</div>'}
-let banT=null;function banner(t){const b=$('banner');b.textContent=t;b.classList.add('show');clearTimeout(banT);banT=setTimeout(()=>b.classList.remove('show'),4200)}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&live)liveConnect()});
-addEventListener('online',()=>{if(live)liveConnect()});
+/* progress sharing removed: nothing is sent anywhere */
+function liveStop(){}
+function pubState(){}
 
 /* ---------- album image ---------- */
 function loadImg(u){return new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=u})}
