@@ -163,6 +163,10 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;z-index:70;pointer-event
   <h1>🎯 スタンプラリー</h1>
   <p class="lead">お題を決めて、子どもごとのカードを<br>それぞれの親のスマホに配れます</p>
   <button class="btn red big" id="goNew">＋ 新しいラリーをつくる</button>
+  <div class="card" style="margin-top:16px;display:none" id="myDealsBox">
+    <h2>📮 つくったラリー（カードを配る）</h2>
+    <ul class="list mycards" id="myDeals"></ul>
+  </div>
   <div class="card" style="margin-top:16px" id="myCardsBox">
     <h2>このスマホのカード</h2>
     <ul class="list mycards" id="myCards"></ul>
@@ -233,6 +237,7 @@ canvas#fx{position:fixed;inset:0;width:100%;height:100%;z-index:70;pointer-event
   <div class="top">
     <div class="title-row">
       <div class="tt"><div class="who" id="pWho"></div><h1 id="pTitle"></h1></div>
+      <button class="btn ghost sm" id="playDeal" style="display:none">📮 配る</button>
       <button class="btn ghost sm" id="playHome">ホーム</button>
     </div>
     <div class="prog"><i id="bar"></i></div>
@@ -2678,7 +2683,12 @@ function renderHome(){
   const keys=S.order.filter(k=>S.cards[k]);
   $('myCards').innerHTML=keys.length?keys.map(k=>{const c=S.cards[k];const d=Object.keys(c.stamps).length;
     return `<li data-k="${k}"><span class="num">${medalFor(d,c.missions.length)||'📇'}</span><span class="t"><b>${esc(c.child)}</b>　${esc(c.name)}</span><span class="pct">${d}/${c.missions.length}</span><button class="x" data-del="${k}">×</button></li>`}).join(''):'<li class="empty">まだありません</li>';
+  const ds=S.deals||[];$('myDealsBox').style.display=ds.length?'block':'none';
+  $('myDeals').innerHTML=ds.map((L,i)=>`<li data-d="${i}"><span class="num" style="background:#cfe6ff">📮</span><span class="t"><b>${esc(L.name)}</b>　${L.players.map(esc).join('・')}</span><span class="pct">お題${L.missions.length}</span><button class="x" data-deld="${i}">×</button></li>`).join('');
   liveStop();show('home')}
+$('myDeals').onclick=e=>{const del=e.target.closest('[data-deld]');
+  if(del){const i=+del.dataset.deld;ask(`「${S.deals[i].name}」を一覧から消しますか？（配ったカードは消えません）`,()=>{S.deals.splice(i,1);save();renderHome()});return}
+  const li=e.target.closest('li[data-d]');if(li){S.lastDeal=S.deals[+li.dataset.d];save();renderDeal()}};
 $('myCards').onclick=e=>{const del=e.target.closest('[data-del]');if(del){const k=del.dataset.del;ask(`「${S.cards[k].child}」のカードをこのスマホから消しますか？`,()=>{const c=S.cards[k];c.missions.forEach((_,i)=>delPhoto(k+':'+i));delete S.cards[k];S.order=S.order.filter(x=>x!==k);save();renderHome()});return}
   const li=e.target.closest('li[data-k]');if(li)openCard(li.dataset.k)};
 $('goNew').onclick=()=>{liveStop();renderSetup();show('setup')};
@@ -2707,6 +2717,7 @@ $('decide').onclick=()=>{
   unlockAudio();
   const r=rid()+rid(),name=D().name.trim()||'スタンプラリー',ps=D().players.length?D().players.slice():['みんな'];
   S.lastDeal={r,name,missions:D().missions.slice(),players:ps,share:false};
+  S.deals=[S.lastDeal].concat(S.deals||[]).slice(0,8);
   S.draft={name:'',missions:[],players:[],share:true};save();renderDeal();
 };
 
@@ -2744,6 +2755,7 @@ async function renderPlay(popIdx){
   const c=C();if(!c)return renderHome();
   $('pWho').textContent=c.child==='みんな'?'みんなのカード':`${c.child} のカード`;
   $('pTitle').textContent=c.name;
+  $('playDeal').style.display=(S.deals||[]).some(x=>x.r===c.r)?'':'none';
   const d=Object.keys(c.stamps).length,n=c.missions.length;
   $('bar').style.width=(d/n*100)+'%';
   $('progTxt').textContent=d===n?'🎉 コンプリート！':`あと ${n-d} こ`;
@@ -2756,6 +2768,7 @@ async function renderPlay(popIdx){
   for(const img of $('grid').querySelectorAll('img[data-ph]')){const u=await getPhoto(cur+':'+img.dataset.ph);if(u)img.src=u}
 }
 $('playHome').onclick=renderHome;
+$('playDeal').onclick=()=>{const L=(S.deals||[]).find(x=>x.r===C().r);if(L){S.lastDeal=L;save();renderDeal()}};
 
 let pend=null;
 $('grid').onclick=e=>{const el=e.target.closest('.m');if(!el)return;const i=+el.dataset.i;unlockAudio();
@@ -2918,6 +2931,8 @@ function sfxFanfare(){const n=[523,523,523,659,784,0,659,784,1047],d=[.12,.12,.1
 
 /* ---------- boot ---------- */
 load();
+if(!S.deals)S.deals=S.lastDeal?[S.lastDeal]:[];
+Object.keys(S.cards).forEach(k=>{const c=S.cards[k];if(!c.r){const j=k.lastIndexOf('-');c.r=k.slice(0,j);c.i=+k.slice(j+1)}});
 function route(){const p=location.hash?dec(location.hash):null;if(p){importCard(p);return true}return false}
 if(!route())renderHome();
 addEventListener('hashchange',route);
